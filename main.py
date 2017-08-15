@@ -49,8 +49,8 @@ def upsample_layer(in_layer, num_classes, name, upscale_factor):
     strides = [1, stride, stride, 1]
     with tf.variable_scope(name):
         in_shape = tf.shape(in_layer)
-        in_h = in_shape[1] * stride
-        in_w = in_shape[2] * stride
+        in_h = in_shape[1]
+        in_w = in_shape[2]
         in_batchSize = in_shape[0]
         # Shape of the in_layer tensor
         # in_batchSize = int(in_layer.get_shape()[0])
@@ -58,8 +58,8 @@ def upsample_layer(in_layer, num_classes, name, upscale_factor):
         # in_h = int(in_layer.get_shape()[2])
         #in_shape = tf.shape(in_layer)
 
-        h = in_w * stride
-        w = in_h * stride
+        h = in_h * stride
+        w = in_w * stride
         new_shape = [in_batchSize, h, w, num_classes]
         output_shape = tf.stack(new_shape)
 
@@ -121,12 +121,14 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     :return: The Tensor for the last layer of output
     """
     # TODO: Implement function
-
-    # print('layer 7 shape: {}'.format(vgg_layer7_out.get_shape()))
-
-    upsample_ly7 = reshape_and_upsample_layer(vgg_layer7_out, num_classes, 32, 'ly7_upsample')
-    upsample_ly4 = reshape_and_upsample_layer(vgg_layer4_out, num_classes, 16, 'ly4_upsample')
-    upsample_ly3 = reshape_and_upsample_layer(vgg_layer3_out, num_classes, 8, 'ly3_upsample')
+    scale_fac = 32
+    upsample_ly7 = reshape_and_upsample_layer(vgg_layer7_out, num_classes, scale_fac, 'ly7_upsample')
+    
+    scale_fac = 16
+    upsample_ly4 = reshape_and_upsample_layer(vgg_layer4_out, num_classes, scale_fac, 'ly4_upsample')
+    
+    scale_fac = 8
+    upsample_ly3 = reshape_and_upsample_layer(vgg_layer3_out, num_classes, scale_fac, 'ly3_upsample')
 
     # add layers according to paper for FCN8 (fig. 3)
     skip_conn = tf.add(upsample_ly3, tf.add(2*upsample_ly4, 4*upsample_ly7))
@@ -136,28 +138,6 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     # print('layer 3 upsample shape: {}'.format(upsample_ly3.get_shape()))
 
     return skip_conn
-
-    # # upsample
-    # skip_1 = tf.layers.conv2d(vgg_layer4_out, num_classes, 1, 1)
-    # print('skip_1 shape: {}'.format(skip_1.get_shape()))
-    # # skip connections
-    # skip_conn_1 = tf.add(upsample_ly7, skip_1)
-    # print('skip_conn_1 shape: {}'.format(skip_conn_1.get_shape()))
-
-    '''
-    4, 2
-    16, 8
-
-    print('layer 3 shape: {}'.format(vgg_layer3_out.get_shape()))
-    # upsample (stride 16?)
-    upsample_16 = tf.layers.conv2d_transpose(skip_1, 256, 2, 2)
-    print('layer 3 upsample shape: {}'.format(upsample_16.get_shape()))
-    # skip connections
-    skip_2 = tf.add(upsample_16, vgg_layer3_out)
-
-    # upsample (stride 8?)
-    upsample_8 = tf.layers.conv2d_transpose(skip_2, num_classes, 8, 8)
-    '''
 #tests.test_layers(layers)
 
 
@@ -224,11 +204,17 @@ def run():
         vgg_input, vgg_keep_prob, vgg_layer3_out, vgg_layer4_out, vgg_layer7_out = load_vgg(sess, 'data/vgg')
         last_out = layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes)
 
+        '''
+        # TEST
         image, labels = next(get_batches_fn(1))
+        print('img shape: {}'.format(image.shape))
         sess.run(tf.global_variables_initializer())
-        sess.run(last_out, feed_dict={vgg_input: image, keep_prob: 1.0})
-        print('FINAL layer 7: {}'.format(last_out.get_shape()))
-
+        debug = sess.run(last_out, feed_dict={vgg_input: image, vgg_keep_prob: 1.0})
+        print('########################################')
+        print('########################################')
+        print('########################################')
+        print('FINAL layer 7: {}'.format(debug.shape))
+        '''
         #file_writer = tf.summary.FileWriter('data/vgg', sess.graph)
 
         # TODO: Train NN using the train_nn function
