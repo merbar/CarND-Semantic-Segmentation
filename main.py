@@ -103,12 +103,9 @@ def load_vgg(sess, vgg_path):
     vgg_layer3_out = sess.graph.get_tensor_by_name(vgg_layer3_out_tensor_name)
     vgg_layer4_out = sess.graph.get_tensor_by_name(vgg_layer4_out_tensor_name)
     vgg_layer7_out = sess.graph.get_tensor_by_name(vgg_layer7_out_tensor_name)
-
-    # to visualize/check graph of provided VGG16 model
-    #file_writer = tf.summary.FileWriter('data/vgg', sess.graph)
         
     return vgg_input, vgg_keep_prob, vgg_layer3_out, vgg_layer4_out, vgg_layer7_out
-#tests.test_load_vgg(load_vgg, tf)
+# tests.test_load_vgg(load_vgg, tf)
 
 
 def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
@@ -136,9 +133,10 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     # print('layer 7 upsample shape: {}'.format(upsample_ly7.get_shape()))
     # print('layer 4 upsample shape: {}'.format(upsample_ly4.get_shape()))
     # print('layer 3 upsample shape: {}'.format(upsample_ly3.get_shape()))
+    # print('skip_conn upsample shape: {}'.format(skip_conn.get_shape()))
 
     return skip_conn
-#tests.test_layers(layers)
+# tests.test_layers(layers)
 
 
 def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
@@ -151,8 +149,14 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
     :return: Tuple of (logits, train_op, cross_entropy_loss)
     """
     # TODO: Implement function
-    return None, None, None
-#tests.test_optimize(optimize)
+    # reshape images
+    logits = tf.reshape(nn_last_layer, (-1, num_classes))
+    labels = tf.reshape(correct_label, (-1, num_classes))
+
+    loss_op = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=labels))
+    train_op = tf.train.AdamOptimizer(learning_rate).minimize(loss_op)
+    return logits, train_op, loss_op
+# tests.test_optimize(optimize)
 
 
 def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image,
@@ -171,8 +175,11 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     :param learning_rate: TF Placeholder for learning rate
     """
     # TODO: Implement function
-    pass
-#tests.test_train_nn(train_nn)
+    for epoch_i in range(epochs):
+        for images, labels in get_batches_fn(batch_size):
+            _, loss = sess.run([train_op, cross_entropy_loss], feed_dict={input_image: images, correct_label: labels, keep_prob: 0.75, learning_rate: 0.0001})
+        print("Epoch {}/{} ; Training Loss: {:.4f}".format(epoch_i+1, epochs, loss))
+# tests.test_train_nn(train_nn)
 
 
 def run():
@@ -181,6 +188,9 @@ def run():
     data_dir = './data'
     runs_dir = './runs'
     tests.test_for_kitti_dataset(data_dir)
+
+    batch_size = 30
+    epochs = 2
 
     # Download pretrained vgg model
     helper.maybe_download_pretrained_vgg(data_dir)
@@ -203,6 +213,9 @@ def run():
         # TODO: Build NN using load_vgg, layers, and optimize function
         vgg_input, vgg_keep_prob, vgg_layer3_out, vgg_layer4_out, vgg_layer7_out = load_vgg(sess, 'data/vgg')
         last_out = layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes)
+        correct_label = tf.placeholder(dtype=tf.float32, shape=(None, None, None, num_classes))
+        learning_rate = tf.placeholder(dtype=tf.float32)
+        logits, train_op, loss_op = optimize(last_out, correct_label, learning_rate, num_classes)
 
         '''
         # TEST
@@ -218,9 +231,19 @@ def run():
         #file_writer = tf.summary.FileWriter('data/vgg', sess.graph)
 
         # TODO: Train NN using the train_nn function
+        sess.run(tf.global_variables_initializer())
+        train_nn(sess, epochs, batch_size, get_batches_fn, train_op, loss_op, vgg_input, correct_label, vgg_keep_prob, learning_rate)
 
         # TODO: Save inference data using helper.save_inference_samples
-        #  helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image)
+        # Tensorboard vis
+        # file_writer = tf.summary.FileWriter('data/vgg', sess.graph)
+        model_name = 'model_e{}_unaug'.format(epochs)
+        saver = tf.train.Saver()
+        saver.save(sess, 'checkpoints/{}.ckpt'.format(model_name))
+        saver.export_meta_graph('checkpoints/{}.meta'.format(model_name))
+        tf.train.write_graph(sess.graph_def, './checkpoints/', '{}.pb'.format(model_name), False)
+
+        helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, vgg_keep_prob, vgg_input)
 
         # OPTIONAL: Apply the trained model to a video
 
